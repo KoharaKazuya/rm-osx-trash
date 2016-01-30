@@ -1,0 +1,110 @@
+#!/bin/bash
+
+set -eu
+
+#
+# 使い方
+#
+
+usage_exit() {
+  echo 'usage: rm [-f | -i] [-Rr] file ...\n       unlink file' >&2
+  exit 1
+}
+
+
+#
+# 削除（ゴミ箱へ）
+#
+trash() {
+  CWD=`pwd | sed -E -e 's/\\\\/\\\\\\\\/g' -e 's/"/\\\\"/g'`
+  osascript - "$@" > /dev/null <<EOF
+on run argv
+    set itemArray to {}
+
+    repeat with i in argv
+        if first character of i is not "/" then
+            set i to "$CWD" & "/" & i
+        end if
+        set itemArray to itemArray & (i as POSIX file as Unicode text)
+    end repeat
+
+    tell application "Finder"
+        delete itemArray
+    end tell
+end run
+EOF
+}
+
+
+#
+# オプション解析
+#
+
+# デフォルトオプション
+force=false        # 存在しない場合は無視
+interactive=false  # 対話
+recursive=false    # 再帰
+
+# オプションを一つずつ処理
+while getopts "firR" OPT; do
+  case $OPT in
+    f )
+      force=true
+      interactive=false
+      ;;
+    i )
+      interactive=true
+      force=false
+      ;;
+    r | R )
+      recursive=true
+      ;;
+    \? )
+      usage_exit
+      ;;
+  esac
+done
+
+# 処理済みのオプションを引数から削除
+shift $((OPTIND - 1))
+
+
+#
+# 削除対象の確認処理
+#
+
+# 削除対象が未指定なら終了
+[ $# -gt 0 ] || usage_exit
+
+# 削除対象を順番に確認
+targets=()
+for target in "$@"; do
+  # 削除対象が存在していない場合はエラー
+  if ! $force && [ ! -e "$target" ]; then
+    echo "rm: $target: No such file or directory" >&2
+    exit 1
+  fi
+  # 削除対象がディレクトリならエラー
+  if ! $recursive && [ -d "$target" ]; then
+    echo "rm: $target: is a directory" >&2
+    exit 1
+  fi
+  # 対象を削除するかどうか確認する
+  if $interactive; then
+    printf "remove $target? " >&2
+    read yes_no
+    if [ "$yes_no" = "y" ]; then
+      # -i オプションが指定された場合は、削除処理を 1 つずつ実行する
+      trash "$target"
+    fi
+  fi
+  # 削除対象として登録
+  if [ -e "$target" ]; then
+    targets+=("$target")
+  fi
+done
+
+# -i オプションが指定されなかった場合のみ、削除処理を一括で行う
+if ! $interactive && [ ${#targets[@]} -gt 0 ]; then
+  trash "${targets[@]}"
+fi

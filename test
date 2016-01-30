@@ -1,0 +1,129 @@
+#!/usr/bin/env bats
+
+setup() {
+  # テスト対象コマンドを指定
+  command=./rm-osx-trash
+  # テスト用削除対象ファイルを作成
+  touch rm_target_{1..10}
+  mkdir -p rm_target_dir_{1..10}
+  touch "some thing" "abc def"
+}
+
+teardown() {
+  # テスト用削除対象ファイルを削除
+  rm -rf rm_target{,_dir}_{1..10}
+  rm -rf "some thing" "abc def"
+}
+
+@test "正常なオプションを受け取る" {
+  run $command -ifrR rm_target_1
+  [ $status -eq 0 ]
+}
+
+@test "不正なオプションでエラー" {
+  run $command -a rm_target_1
+  [ $status -ne 0 ]
+}
+
+@test "引数を指定しなければエラー" {
+  run $command
+  [ $status -ne 0 ]
+}
+
+@test "存在しないファイルを指定するとエラー" {
+  run $command xxx
+  [ $status -ne 0 ]
+}
+
+@test "オプション無しでファイルを削除できる" {
+  run $command rm_target_1
+  [ $status -eq 0 ]
+  [ ! -e "rm_target_1" ]
+}
+
+@test "複数ファイルを削除できる" {
+  run $command rm_target_{1,2,3}
+  [ $status -eq 0 ]
+  [ ! -e "rm_target_1" ]
+  [ ! -e "rm_target_2" ]
+  [ ! -e "rm_target_3" ]
+}
+
+@test "ディレクトリを削除できる" {
+  run $command -r rm_target_dir_1
+  [ $status -eq 0 ]
+  [ ! -e "rm_target_dir_1" ]
+}
+
+@test "ファイルとディレクトリの組み合わせを削除できる" {
+  run $command -r rm_target{,_dir}_{1,2}
+  [ $status -eq 0 ]
+  [ ! -e "rm_target_1" ]
+  [ ! -e "rm_target_2" ]
+  [ ! -e "rm_target_dir_1" ]
+  [ ! -e "rm_target_dir_2" ]
+}
+
+@test "存在しないファイルでも -f を指定すれば正常に終了" {
+  run $command -f xxx
+  [ $status -eq 0 ]
+}
+
+@test "ディレクトリを指定されるとエラー" {
+  run $command rm_target_dir_1
+  [ $status -ne 0 ]
+}
+
+@test "ディレクトリでも -r を指定すれば正常に終了" {
+  run $command -r rm_target_dir_1
+  [ $status -eq 0 ]
+}
+
+@test "-i オプションを指定すると、削除前に確認される" {
+  expect -c "
+    set timeout 1
+    spawn $command -i rm_target_1
+    expect {
+      default { exit 0 }
+      \"\n\" {
+        exit 1
+      }
+    }
+  "
+  [ -e rm_target_1 ]
+}
+
+@test "-i オプションで y を入力すると削除される" {
+  run expect -c "
+    set timeout 1
+    spawn $command -i rm_target_1
+    expect {
+      \"? \" {
+        send \"y\n\"
+        exit 0
+      }
+    }
+  "
+  [ ! -e "rm_target_1" ]
+}
+
+@test "-i オプションで n を入力すると削除されない" {
+  expect -c "
+    set timeout 1
+    spawn $command -i rm_target_1
+    expect {
+      default { exit 1 }
+      \"? \" {
+        send \"n\n\"
+        exit 0
+      }
+    }
+  "
+  [ -e "rm_target_1" ]
+}
+
+@test "ファイル名にスペースが含まれる場合も削除可能" {
+  run $command "some thing" "abc def"
+  [ ! -e "some thing" ]
+  [ ! -e "abc def" ]
+}
