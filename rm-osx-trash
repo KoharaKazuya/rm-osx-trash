@@ -78,6 +78,7 @@ shift $((OPTIND - 1))
 
 # 削除対象を順番に確認
 targets=()
+sym_targets=()
 for target in "$@"; do
   # 削除対象が存在していない場合はエラー
   if ! $force && [ ! -e "$target" ]; then
@@ -97,14 +98,24 @@ for target in "$@"; do
       # -i オプションが指定された場合は、削除処理を 1 つずつ実行する
       trash "$target"
     fi
-  fi
-  # 削除対象として登録
-  if [ -e "$target" ]; then
-    targets+=("$target")
+  else
+    # シンボリックリンクなら、ゴミ箱へは送らない
+    # リンク先が削除されてしまうので組み込み rm を使用する
+    if [ -L "$target" ]; then
+      sym_targets+=("$target")
+    else
+      # 削除対象として登録
+      if [ -e "$target" ]; then
+        targets+=("$target")
+      fi
+    fi
   fi
 done
 
-# -i オプションが指定されなかった場合のみ、削除処理を一括で行う
-if ! $interactive && [ ${#targets[@]} -gt 0 ]; then
+# 削除処理を一括で行う
+if [ ${#targets[@]} -gt 0 ]; then
   trash "${targets[@]}"
+fi
+if [ ${#sym_targets[@]} -gt 0 ]; then
+  \rm "${sym_targets[@]}"
 fi
