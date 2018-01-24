@@ -85,8 +85,14 @@ for target in "$@"; do
     echo "rm: $target: No such file or directory" >&2
     exit 1
   fi
+  # 削除対象がシンボリックリンクなら、ゴミ箱へは送らない
+  # リンク先が削除されてしまうので組み込み rm を使用する
+  symlink=false
+  if [ -L "$target" ]; then
+    symlink=true
+  fi
   # 削除対象がディレクトリならエラー
-  if ! $recursive && [ -d "$target" ]; then
+  if ! $symlink && ! $recursive && [ -d "$target" ]; then
     echo "rm: $target: is a directory" >&2
     exit 1
   fi
@@ -96,16 +102,18 @@ for target in "$@"; do
     read yes_no
     if [ "$yes_no" = "y" ]; then
       # -i オプションが指定された場合は、削除処理を 1 つずつ実行する
-      trash "$target"
+      if $symlink; then
+        \rm "$target"
+      else
+        trash "$target"
+      fi
     fi
   else
-    # シンボリックリンクなら、ゴミ箱へは送らない
-    # リンク先が削除されてしまうので組み込み rm を使用する
-    if [ -L "$target" ]; then
-      sym_targets+=("$target")
-    else
-      # 削除対象として登録
-      if [ -e "$target" ]; then
+    # 削除対象として登録
+    if [ -e "$target" ]; then
+      if $symlink; then
+        sym_targets+=("$target")
+      else
         targets+=("$target")
       fi
     fi
