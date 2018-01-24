@@ -80,8 +80,14 @@ shift $((OPTIND - 1))
 targets=()
 sym_targets=()
 for target in "$@"; do
+  # 削除対象が存在するか判定
+  exists=false
+  if [ -L "$target" ] || [ -e "$target" ]; then
+    # シンボリックリンクの場合はリンク先ではなくリンクそのものを対象とするため true とする
+    exists=true
+  fi
   # 削除対象が存在していない場合はエラー
-  if ! $force && [ ! -e "$target" ]; then
+  if ! $force && ! $exists; then
     echo "rm: $target: No such file or directory" >&2
     exit 1
   fi
@@ -110,7 +116,7 @@ for target in "$@"; do
     fi
   else
     # 削除対象として登録
-    if [ -e "$target" ]; then
+    if $exists; then
       if $symlink; then
         sym_targets+=("$target")
       else
